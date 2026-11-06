@@ -1,0 +1,25 @@
+# KEDA: scale the workers by the length of the Redis list "jobs": one worker per 5 waiting jobs, 0 to 6 workers.
+# At 0 jobs the workers go to ZERO pods (the HPA cannot do that; KEDA can).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: workers
+  namespace: demo
+spec:
+  scaleTargetRef:
+    name: workers
+  minReplicaCount: 0
+  maxReplicaCount: 6
+  pollingInterval: 5          # look at the queue every 5 s
+  cooldownPeriod: 15          # 15 s with an empty queue before going to zero
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 15
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.demo.svc.cluster.local:6379
+        listName: jobs
+        listLength: "5"

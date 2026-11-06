@@ -1,0 +1,31 @@
+# Queue workers. replicas: 0 is the starting point: KEDA (scaledobject.yaml) takes over the replica count.
+# The script comes from the ConfigMap "worker-script" (made by scripts/up.sh from app/worker.sh).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workers
+  namespace: demo
+spec:
+  replicas: 0
+  selector:
+    matchLabels: {app: workers}
+  template:
+    metadata:
+      labels: {app: workers}
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: worker
+          image: redis:7-alpine
+          command: ["sh", "/worker/worker.sh"]
+          env:
+            - {name: REDIS_HOST, value: redis}
+            - {name: WORK_SECONDS, value: "2"}
+          volumeMounts:
+            - {name: script, mountPath: /worker}
+          resources:
+            requests: {cpu: 20m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+      volumes:
+        - name: script
+          configMap: {name: worker-script}

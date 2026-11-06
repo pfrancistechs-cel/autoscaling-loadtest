@@ -1,0 +1,32 @@
+name: autoscale
+
+# A one-node Kubernetes cluster (k3s, in ONE container). Everything else (the web app, Redis, the workers, KEDA and the
+# console) is installed INTO the cluster by scripts/up.sh. Published port: 8080 (Traefik: the app at / and the console at /console/).
+# k3s ships metrics-server (CPU and memory per pod), which the Horizontal Pod Autoscaler needs.
+services:
+  server:
+    image: ${K3S_IMAGE:-rancher/k3s:v1.30.5-k3s1}
+    container_name: autoscale-server
+    command:
+      - server
+      - --write-kubeconfig-mode=644
+      - --kube-controller-manager-arg=horizontal-pod-autoscaler-sync-period=5s   # HPA looks every 5 s instead of 15 s: a faster demo
+    privileged: true                 # k3s runs containerd, kubelet and networking inside this container
+    restart: unless-stopped
+    tmpfs:
+      - /run
+      - /var/run
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 65535
+        hard: 65535
+    environment:
+      K3S_TOKEN: ${K3S_TOKEN:?run ./scripts/up.sh, it creates .env}
+    volumes:
+      - k3s-data:/var/lib/rancher/k3s   # cluster state AND the image cache, so restarts are fast
+    ports:
+      - "8080:80"                       # Traefik "web" entry point: the app at /, the console at /console/
+
+volumes:
+  k3s-data:

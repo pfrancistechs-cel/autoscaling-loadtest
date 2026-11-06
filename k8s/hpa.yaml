@@ -1,0 +1,27 @@
+# Horizontal Pod Autoscaler: keep the average CPU of the web pods near 70% of their request (100m), between 1 and 6 pods.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web
+  namespace: demo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web
+  minReplicas: 1
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0        # react at once
+      policies:
+        - {type: Pods, value: 4, periodSeconds: 15}
+    scaleDown:
+      stabilizationWindowSeconds: 30       # the default is 300 s; 30 s keeps the demo short (production: keep it long)
+      policies:
+        - {type: Pods, value: 2, periodSeconds: 15}

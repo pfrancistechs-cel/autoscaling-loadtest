@@ -1,0 +1,94 @@
+# The live console. It runs INSIDE the cluster and reads the Kubernetes API with a read-only service account, so the
+# page shows what the autoscalers are doing right now. Code from the ConfigMap "console-code" (app/console.py).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: console
+  namespace: demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: console-read
+  namespace: demo
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: console-read
+  namespace: demo
+subjects:
+  - {kind: ServiceAccount, name: console, namespace: demo}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: console-read
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: console}
+  template:
+    metadata:
+      labels: {app: console}
+    spec:
+      serviceAccountName: console
+      containers:
+        - name: console
+          image: python:3.12-slim
+          command: ["python", "/code/console.py"]
+          env:
+            - {name: NAMESPACE, value: demo}
+            - {name: REDIS_HOST, value: redis}
+          ports: [{containerPort: 8081}]
+          readinessProbe:
+            httpGet: {path: /console/healthz, port: 8081}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: code, mountPath: /code}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+      volumes:
+        - name: code
+          configMap: {name: console-code}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: console
+  namespace: demo
+spec:
+  selector: {app: console}
+  ports: [{port: 80, targetPort: 8081}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: console
+  namespace: demo
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /console
+            pathType: Prefix
+            backend: {service: {name: console, port: {number: 80}}}
